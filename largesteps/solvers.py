@@ -10,7 +10,7 @@ class Solver:
     def __init__(self, M):
         pass
 
-    def solve(self, b, backward=False):
+    def solve(self, b, backward=False, key=None):
         """
         Solve the linear system.
 
@@ -20,6 +20,8 @@ class Solver:
             The right hand side of the system Lx=b
         backward : bool (optional)
             Whether this is the backward or forward solve
+        key : str
+            Name of the variable
         """
         raise NotImplementedError()
 
@@ -33,7 +35,7 @@ class CholeskySolver():
     def __init__(self, M):
         self.solver = CholeskySolverF(M.shape[0], M.indices()[0], M.indices()[1], M.values(), MatrixType.COO)
 
-    def solve(self, b, backward=False):
+    def solve(self, b, backward=False, key=None):
         x = torch.zeros_like(b)
         self.solver.solve(b.detach(), x)
         return x
@@ -51,8 +53,8 @@ class ConjugateGradientSolver(Solver):
         M : torch.sparse_coo_tensor
             Linear system matrix.
         """
-        self.guess_fwd = None
-        self.guess_bwd = None
+        self.guess_fwd = {}
+        self.guess_bwd = {}
         self.M = M
 
     def solve_axis(self, b, x0):
@@ -83,7 +85,7 @@ class ConjugateGradientSolver(Solver):
             p = -r + beta*p
         return x
 
-    def solve(self, b, backward=False):
+    def solve(self, b, backward=False, key=None):
         """
         Solve the sparse linear system.
 
@@ -98,16 +100,18 @@ class ConjugateGradientSolver(Solver):
             The right hand side of the system Ax=b.
         backward : bool
             Whether we are in the backward or the forward pass.
+        key: str
+            Name of the variable, to handle multiple variables at a time
         """
-        if self.guess_fwd is None:
+        if key not in self.guess_fwd:
             # Initialize starting guesses in the first run
-            self.guess_bwd = torch.zeros_like(b)
-            self.guess_fwd = torch.zeros_like(b)
+            self.guess_bwd[key] = torch.zeros_like(b)
+            self.guess_fwd[key] = torch.zeros_like(b)
 
         if backward:
-            x0 = self.guess_bwd
+            x0 = self.guess_bwd[key]
         else:
-            x0 = self.guess_fwd
+            x0 = self.guess_fwd[key]
 
         if len(b.shape) != 2:
             raise ValueError(f"Invalid array shape {b.shape} for ConjugateGradientSolver.solve: expected shape (a, b)")
@@ -119,9 +123,9 @@ class ConjugateGradientSolver(Solver):
 
         if backward:
             # Update initial guess for next iteration
-            self.guess_bwd = x
+            self.guess_bwd[key] = x
         else:
-            self.guess_fwd = x
+            self.guess_fwd[key] = x
 
         return x
 
@@ -132,16 +136,17 @@ class DifferentiableSolve(Function):
     This simply calls the solve methods implemented by the Solver classes.
     """
     @staticmethod
-    def forward(ctx, solver, b):
+    def forward(ctx, solver, b, key):
         ctx.solver = solver
-        return solver.solve(b, backward=False)
+        ctx.key = key
+        return solver.solve(b, backward=False, key=key)
 
     @staticmethod
     def backward(ctx, grad_output):
         solver_grad = None # We have to return a gradient per input argument in forward
         b_grad = None
         if ctx.needs_input_grad[1]:
-            b_grad = ctx.solver.solve(grad_output, backward=True)
+            b_grad = ctx.solver.solve(grad_output, backward=True, key=ctx.key)
         return (solver_grad, b_grad)
 
 # Alias for DifferentiableSolve function

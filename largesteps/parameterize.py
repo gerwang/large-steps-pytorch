@@ -29,7 +29,7 @@ def to_differential(L, v):
     """
     return L @ v
 
-def from_differential(L, u, method='Cholesky'):
+def from_differential(L, u, method='Cholesky', key=None):
     """
     Convert differential coordinates back to Cartesian.
 
@@ -44,6 +44,8 @@ def from_differential(L, u, method='Cholesky'):
         Differential coordinates
     method : {'Cholesky', 'CG'}
         Solver to use.
+    key : str
+        Name of the variable
     """
     key = (id(L), method)
     if key not in _cache.keys():
@@ -58,4 +60,4 @@ def from_differential(L, u, method='Cholesky'):
     else:
         solver = _cache[key][0]
 
-    return solve(solver, u)
+    return solve(solver, u, key)
