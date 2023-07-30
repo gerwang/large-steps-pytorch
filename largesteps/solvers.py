@@ -145,9 +145,10 @@ class DifferentiableSolve(Function):
     def backward(ctx, grad_output):
         solver_grad = None # We have to return a gradient per input argument in forward
         b_grad = None
+        key_grad = None
         if ctx.needs_input_grad[1]:
             b_grad = ctx.solver.solve(grad_output, backward=True, key=ctx.key)
-        return (solver_grad, b_grad)
+        return (solver_grad, b_grad, key_grad)
 
 # Alias for DifferentiableSolve function
 solve = DifferentiableSolve.apply
